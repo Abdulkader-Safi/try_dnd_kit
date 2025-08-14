@@ -17,7 +17,7 @@ const INITIAL_BOXES: BoxData[] = [
 		type: "Layout",
 		label: "Header",
 		color: "bg-blue-100 border-blue-300",
-		size: "wide",
+		size: "normal",
 	},
 	{
 		id: "nav-1",
@@ -38,7 +38,7 @@ const INITIAL_BOXES: BoxData[] = [
 		type: "Layout",
 		label: "Footer",
 		color: "bg-blue-100 border-blue-300",
-		size: "wide",
+		size: "normal",
 	},
 	{
 		id: "button-1",
@@ -80,7 +80,7 @@ const INITIAL_BOXES: BoxData[] = [
 		type: "Data",
 		label: "Data Table",
 		color: "bg-purple-100 border-purple-300",
-		size: "wide",
+		size: "normal",
 	},
 	{
 		id: "form-1",
@@ -94,26 +94,26 @@ const INITIAL_BOXES: BoxData[] = [
 		type: "Forms",
 		label: "Search Bar",
 		color: "bg-orange-100 border-orange-300",
-		size: "wide",
+		size: "normal",
 	},
 ];
 
-const GRID_SIZE = 16; // 4x4 grid
+const GRID_SIZE = 18; // 6x3 grid (6 rows × 3 columns)
 
 interface GridSlot {
 	id: string;
 	box?: BoxData;
-	isOccupiedByMultiCell?: boolean;
+	isOccupiedByMultiColumn?: boolean; // true if this slot is occupied by a multi-column box but not the primary slot
 }
 
-// Utility functions for multi-cell placement
+// Utility functions for multi-column placement
 const getSlotIndex = (slotId: string): number => {
 	return Number.parseInt(slotId.replace("slot-", ""));
 };
 
 const getSlotPosition = (
 	index: number,
-	columns = 4,
+	columns = 3,
 ): { row: number; col: number } => {
 	return {
 		row: Math.floor(index / columns),
@@ -121,7 +121,7 @@ const getSlotPosition = (
 	};
 };
 
-const getSlotId = (row: number, col: number, columns = 4): string => {
+const getSlotId = (row: number, col: number, columns = 3): string => {
 	return `slot-${row * columns + col}`;
 };
 
@@ -129,14 +129,14 @@ const canPlaceBox = (
 	slotId: string,
 	boxSize: BoxData["size"],
 	gridSlots: GridSlot[],
-	columns = 4,
+	columns = 3,
 ): boolean => {
 	const slotIndex = getSlotIndex(slotId);
 	const position = getSlotPosition(slotIndex, columns);
 
 	// Check if the primary slot is available
 	const primarySlot = gridSlots.find((slot) => slot.id === slotId);
-	if (primarySlot?.box || primarySlot?.isOccupiedByMultiCell) {
+	if (primarySlot?.box || primarySlot?.isOccupiedByMultiColumn) {
 		return false;
 	}
 
@@ -145,7 +145,7 @@ const canPlaceBox = (
 		if (position.col >= columns - 1) return false; // Not enough space to the right
 		const rightSlotId = getSlotId(position.row, position.col + 1, columns);
 		const rightSlot = gridSlots.find((slot) => slot.id === rightSlotId);
-		return !rightSlot?.box && !rightSlot?.isOccupiedByMultiCell;
+		return !rightSlot?.box && !rightSlot?.isOccupiedByMultiColumn;
 	}
 
 	return true; // normal boxes only need 1 slot
@@ -154,7 +154,7 @@ const canPlaceBox = (
 const getOccupiedSlots = (
 	slotId: string,
 	boxSize: BoxData["size"],
-	columns = 4,
+	columns = 3,
 ): string[] => {
 	const slots = [slotId];
 	const slotIndex = getSlotIndex(slotId);
@@ -191,36 +191,88 @@ function App() {
 		);
 		if (draggedFromGrid?.box) {
 			setActiveBox(draggedFromGrid.box);
+			
+			// If dragging a wide box, temporarily clear its occupied slots
+			if (draggedFromGrid.box.size === "wide") {
+				const occupiedSlots = getOccupiedSlots(draggedFromGrid.id, draggedFromGrid.box.size, 3);
+				setGridSlots((prev) =>
+					prev.map((slot) => {
+						if (occupiedSlots.includes(slot.id)) {
+							return { ...slot, box: undefined, isOccupiedByMultiColumn: false };
+						}
+						return slot;
+					}),
+				);
+			}
 		}
 	};
 
 	const handleDragEnd = (event: DragEndEvent) => {
 		const { active, over } = event;
+		const originalActiveBox = activeBox;
 		setActiveBox(null);
 
-		if (!over || !active) return;
+		// Find if we were dragging from the grid
+		const draggedFromGrid = gridSlots.find(
+			(slot) => slot.box?.id === active.id,
+		);
+
+		// If no valid drop target or not over anything, restore the box if it was from grid
+		if (!over || !active) {
+			if (draggedFromGrid?.box && originalActiveBox) {
+				// Restore the box to its original position
+				const occupiedSlots = getOccupiedSlots(draggedFromGrid.id, originalActiveBox.size, 3);
+				setGridSlots((prev) =>
+					prev.map((slot) => {
+						if (slot.id === draggedFromGrid.id) {
+							return { ...slot, box: originalActiveBox, isOccupiedByMultiColumn: false };
+						}
+						if (occupiedSlots.includes(slot.id) && slot.id !== draggedFromGrid.id && originalActiveBox.size === "wide") {
+							return { ...slot, box: undefined, isOccupiedByMultiColumn: true };
+						}
+						return slot;
+					}),
+				);
+			}
+			return;
+		}
 
 		const draggedFromSidebar = availableBoxes.find(
 			(box) => box.id === active.id,
 		);
-		const draggedFromGrid = gridSlots.find(
-			(slot) => slot.box?.id === active.id,
-		);
 		const targetSlotId = over.id as string;
 
 		// Only allow dropping on grid slots
-		if (!targetSlotId.startsWith("slot-")) return;
+		if (!targetSlotId.startsWith("slot-")) {
+			// Restore box if it was dragged from grid
+			if (draggedFromGrid?.box && originalActiveBox) {
+				const occupiedSlots = getOccupiedSlots(draggedFromGrid.id, originalActiveBox.size, 3);
+				setGridSlots((prev) =>
+					prev.map((slot) => {
+						if (slot.id === draggedFromGrid.id) {
+							return { ...slot, box: originalActiveBox, isOccupiedByMultiColumn: false };
+						}
+						if (occupiedSlots.includes(slot.id) && slot.id !== draggedFromGrid.id && originalActiveBox.size === "wide") {
+							return { ...slot, box: undefined, isOccupiedByMultiColumn: true };
+						}
+						return slot;
+					}),
+				);
+			}
+			return;
+		}
 
 		// Case 1: Dragging from sidebar to grid
 		if (draggedFromSidebar && !draggedFromGrid) {
 			// Check if we can place the box at the target location
-			if (!canPlaceBox(targetSlotId, draggedFromSidebar.size, gridSlots))
+			if (!canPlaceBox(targetSlotId, draggedFromSidebar.size, gridSlots, 3))
 				return;
 
 			// Get all slots that will be occupied by this box
 			const occupiedSlots = getOccupiedSlots(
 				targetSlotId,
 				draggedFromSidebar.size,
+				3,
 			);
 
 			// Remove box from available boxes (one-time use)
@@ -236,12 +288,12 @@ function App() {
 						return {
 							...slot,
 							box: draggedFromSidebar,
-							isOccupiedByMultiCell: false,
+							isOccupiedByMultiColumn: false,
 						};
 					}
 					if (occupiedSlots.includes(slot.id) && slot.id !== targetSlotId) {
 						// Secondary slots are marked as occupied
-						return { ...slot, box: undefined, isOccupiedByMultiCell: true };
+						return { ...slot, box: undefined, isOccupiedByMultiColumn: true };
 					}
 					return slot;
 				}),
@@ -259,33 +311,51 @@ function App() {
 			const oldOccupiedSlots = getOccupiedSlots(
 				draggedFromGrid.id,
 				draggedBox.size,
+				3,
 			);
 
 			// Create a temporary grid state with old position cleared for collision detection
 			const tempGridSlots = gridSlots.map((slot) => {
 				if (oldOccupiedSlots.includes(slot.id)) {
-					return { ...slot, box: undefined, isOccupiedByMultiCell: false };
+					return { ...slot, box: undefined, isOccupiedByMultiColumn: false };
 				}
 				return slot;
 			});
 
 			// Check if we can place the box at the target location (using temp grid state)
-			if (!canPlaceBox(targetSlotId, draggedBox.size, tempGridSlots)) return;
+			if (!canPlaceBox(targetSlotId, draggedBox.size, tempGridSlots, 3)) {
+				// Restore the box to its original position
+				if (originalActiveBox) {
+					const occupiedSlots = getOccupiedSlots(draggedFromGrid.id, originalActiveBox.size, 3);
+					setGridSlots((prev) =>
+						prev.map((slot) => {
+							if (slot.id === draggedFromGrid.id) {
+								return { ...slot, box: originalActiveBox, isOccupiedByMultiColumn: false };
+							}
+							if (occupiedSlots.includes(slot.id) && slot.id !== draggedFromGrid.id && originalActiveBox.size === "wide") {
+								return { ...slot, box: undefined, isOccupiedByMultiColumn: true };
+							}
+							return slot;
+						}),
+					);
+				}
+				return;
+			}
 
-			const newOccupiedSlots = getOccupiedSlots(targetSlotId, draggedBox.size);
+			const newOccupiedSlots = getOccupiedSlots(targetSlotId, draggedBox.size, 3);
 
 			setGridSlots((prev) =>
 				prev.map((slot) => {
 					// Clear old position
 					if (oldOccupiedSlots.includes(slot.id)) {
-						return { ...slot, box: undefined, isOccupiedByMultiCell: false };
+						return { ...slot, box: undefined, isOccupiedByMultiColumn: false };
 					}
 					// Set new position
 					if (slot.id === targetSlotId) {
-						return { ...slot, box: draggedBox, isOccupiedByMultiCell: false };
+						return { ...slot, box: draggedBox, isOccupiedByMultiColumn: false };
 					}
 					if (newOccupiedSlots.includes(slot.id) && slot.id !== targetSlotId) {
-						return { ...slot, box: undefined, isOccupiedByMultiCell: true };
+						return { ...slot, box: undefined, isOccupiedByMultiColumn: true };
 					}
 					return slot;
 				}),
@@ -301,13 +371,13 @@ function App() {
 		const boxToReturn = gridSlot.box;
 
 		// Get all slots occupied by this box
-		const occupiedSlots = getOccupiedSlots(gridSlot.id, boxToReturn.size);
+		const occupiedSlots = getOccupiedSlots(gridSlot.id, boxToReturn.size, 3);
 
 		// Clear all occupied slots
 		setGridSlots((prev) =>
 			prev.map((slot) => {
 				if (occupiedSlots.includes(slot.id)) {
-					return { ...slot, box: undefined, isOccupiedByMultiCell: false };
+					return { ...slot, box: undefined, isOccupiedByMultiColumn: false };
 				}
 				return slot;
 			}),
@@ -328,7 +398,7 @@ function App() {
 				<GridDropZone
 					gridSlots={gridSlots}
 					onRemoveBox={handleRemoveBox}
-					columns={4}
+					columns={3}
 				/>
 
 				<DragOverlay>

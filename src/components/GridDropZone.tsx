@@ -6,7 +6,7 @@ import type { BoxData } from "./DraggableBox";
 interface GridSlot {
 	id: string;
 	box?: BoxData;
-	isOccupiedByMultiCell?: boolean; // true if this slot is occupied by a multi-cell box but not the primary slot
+	isOccupiedByMultiColumn?: boolean;
 }
 
 interface GridDropZoneProps {
@@ -22,24 +22,24 @@ function GridSlotComponent({
 	const { isOver, setNodeRef } = useDroppable({
 		id: slot.id,
 		disabled:
-			slot.isOccupiedByMultiCell || (slot.box && slot.box.size !== "normal"), // Disable if occupied by multi-cell or has multi-cell box
+			slot.isOccupiedByMultiColumn || (slot.box && slot.box.size !== "normal"), // Disable if occupied by multi-column or has multi-column box
 	});
 
-	// If this slot is occupied by a multi-cell box but not the primary slot, render invisible placeholder
-	if (slot.isOccupiedByMultiCell && !slot.box) {
-		return <div className="aspect-square" />; // Invisible placeholder to maintain grid structure
+	// If this slot is occupied by a multi-column box but not the primary slot, render invisible placeholder
+	if (slot.isOccupiedByMultiColumn && !slot.box) {
+		return <div className="aspect-video" />; // Invisible placeholder to maintain grid structure
 	}
 
-	// If this slot has a multi-cell box, don't render the slot border/content (it will be rendered separately)
-	if (slot.box && slot.box.size !== "normal") {
-		return <div className="aspect-square" />; // Invisible placeholder for multi-cell primary slot
+	// If this slot has a multi-column box, don't render the slot border/content (it will be rendered separately)
+	if (slot.box && slot.box.size === "wide") {
+		return <div className="aspect-video" />; // Invisible placeholder for multi-column primary slot
 	}
 
 	return (
 		<div
 			ref={setNodeRef}
 			className={cn(
-				"aspect-square border-2 border-dashed border-gray-300 rounded-lg p-2 transition-all",
+				"aspect-video border-2 border-dashed border-gray-300 rounded-lg p-2 transition-all",
 				"hover:border-gray-400",
 				isOver && "border-blue-500 bg-blue-50",
 				slot.box && "border-solid border-gray-400",
@@ -59,14 +59,14 @@ function GridSlotComponent({
 export function GridDropZone({
 	gridSlots,
 	onRemoveBox,
-	columns = 4,
+	columns = 3,
 }: GridDropZoneProps) {
 	const rows = Math.ceil(gridSlots.length / columns);
 
 	return (
 		<div className="flex-1 p-6">
 			<div
-				className="grid gap-4 h-full"
+				className="grid gap-4"
 				style={{
 					gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
 					gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
@@ -80,7 +80,7 @@ export function GridDropZone({
 					/>
 				))}
 
-				{/* Render multi-cell boxes with proper grid positioning */}
+				{/* Render multi-column boxes with proper grid positioning */}
 				{gridSlots.map((slot) => {
 					if (slot.box && slot.box.size === "wide") {
 						const slotIndex = Number.parseInt(slot.id.replace("slot-", ""));

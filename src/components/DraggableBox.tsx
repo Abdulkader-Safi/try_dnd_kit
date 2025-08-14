@@ -6,7 +6,7 @@ export interface BoxData {
 	type: string;
 	label: string;
 	color: string;
-	size: "normal" | "wide"; // normal = 1x1, wide = 2x1
+	size: "normal" | "wide"; // normal = 1 column, wide = 2 columns
 }
 
 interface DraggableBoxProps {
@@ -32,14 +32,14 @@ export function DraggableBox({ box, disabled = false }: DraggableBoxProps) {
 			case "wide":
 				return "aspect-[2/1]"; // 2:1 aspect ratio for wide boxes
 			default:
-				return "aspect-square"; // 1:1 for normal boxes
+				return "aspect-video"; // 16:9 for normal boxes
 		}
 	};
 
 	const getSizeIndicator = () => {
 		switch (box.size) {
 			case "wide":
-				return "↔️"; // horizontal arrow
+				return "↔️"; // horizontal arrow for wide boxes
 			default:
 				return "";
 		}
